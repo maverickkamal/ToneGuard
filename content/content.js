@@ -19,9 +19,12 @@ const PLATFORM_CONFIGS = {
   }
 };
 
+const PLACEHOLDER_EMOTION = "test-placeholder";
+
 let activePlatform = null;
 let postIdCounter = 0;
 let feedObserver = null;
+const revealedPosts = new Set();
 
 function detectPlatform() {
   const hostname = window.location.hostname;
@@ -43,6 +46,108 @@ function extractPostText(postElement, textSelector) {
     .join(" ");
 }
 
+function normalizeText(text) {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function extractPostFingerprint(postElement) {
+  if (activePlatform.name === "twitter") {
+    const permalinkEl = postElement.querySelector('a[href*="/status/"] time')?.parentElement
+      || postElement.querySelector('a[href*="/status/"]');
+    if (permalinkEl) {
+      const href = permalinkEl.getAttribute("href");
+      const statusMatch = href && href.match(/\/status\/(\d+)/);
+      if (statusMatch) return `tweet-${statusMatch[1]}`;
+    }
+  }
+
+  if (activePlatform.name === "reddit") {
+    const permalink = postElement.getAttribute("permalink")
+      || postElement.getAttribute("content-href");
+    if (permalink) return `reddit-${permalink}`;
+
+    const idAttr = postElement.getAttribute("id");
+    if (idAttr) return `reddit-${idAttr}`;
+  }
+
+  if (activePlatform.name === "linkedin") {
+    const urnAttr = postElement.getAttribute("data-urn");
+    if (urnAttr) return `linkedin-${urnAttr}`;
+  }
+
+  const postText = extractPostText(postElement, activePlatform.textSelector);
+  if (postText.length > 0) return `text-${normalizeText(postText)}`;
+
+  return null;
+}
+
+function createOverlayElement(emotions) {
+  const overlay = document.createElement("div");
+  overlay.className = "toneguard-overlay";
+
+  const content = document.createElement("div");
+  content.className = "toneguard-overlay-content";
+
+  const warningIcon = document.createElement("span");
+  warningIcon.className = "toneguard-warning-icon";
+  warningIcon.textContent = "⚠";
+
+  const warningLabel = document.createElement("span");
+  warningLabel.className = "toneguard-warning-label";
+  warningLabel.textContent = `Detected: ${emotions.join(", ")}`;
+
+  const revealButton = document.createElement("button");
+  revealButton.className = "toneguard-reveal-button";
+  revealButton.textContent = "Reveal Anyway";
+  revealButton.addEventListener("click", handleRevealClick);
+
+  content.appendChild(warningIcon);
+  content.appendChild(warningLabel);
+  content.appendChild(revealButton);
+  overlay.appendChild(content);
+
+  return overlay;
+}
+
+function handleRevealClick(event) {
+  event.stopPropagation();
+  event.preventDefault();
+
+  const overlay = event.target.closest(".toneguard-overlay");
+  if (!overlay) return;
+
+  const postElement = overlay.parentElement;
+  overlay.remove();
+
+  if (postElement) {
+    postElement.setAttribute("data-toneguard-revealed", "true");
+    const fingerprint = extractPostFingerprint(postElement);
+    if (fingerprint) {
+      revealedPosts.add(fingerprint);
+      console.log(`[ToneGuard] Revealed: ${fingerprint}`);
+    }
+  }
+}
+
+function isPostRevealed(postElement, fingerprint) {
+  if (postElement.getAttribute("data-toneguard-revealed") === "true") return true;
+  if (fingerprint && revealedPosts.has(fingerprint)) return true;
+  return false;
+}
+
+function applyOverlay(postElement, fingerprint, emotions) {
+  if (isPostRevealed(postElement, fingerprint)) return;
+  if (postElement.querySelector(".toneguard-overlay")) return;
+
+  const computedPosition = window.getComputedStyle(postElement).position;
+  if (computedPosition === "static") {
+    postElement.style.position = "relative";
+  }
+
+  const overlay = createOverlayElement(emotions);
+  postElement.appendChild(overlay);
+}
+
 function processPost(postElement) {
   if (postElement.hasAttribute("data-toneguard-id")) return;
 
@@ -53,7 +158,11 @@ function processPost(postElement) {
   const postId = `post-${postIdCounter}`;
   postElement.setAttribute("data-toneguard-id", postId);
 
-  console.log(`[ToneGuard] ${postId}:`, postText.substring(0, 120));
+  const fingerprint = extractPostFingerprint(postElement);
+
+  console.log(`[ToneGuard] ${postId} (${fingerprint}):`, postText.substring(0, 120));
+
+  applyOverlay(postElement, fingerprint, [PLACEHOLDER_EMOTION]);
 }
 
 function scanExistingPosts() {
