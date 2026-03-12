@@ -1,0 +1,23 @@
+{
+  "name": "toneguard",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "copy-wasm": "node -e \"const fs=require('fs'); fs.mkdirSync('lib',{recursive:true}); ['ort-wasm-simd-threaded.wasm','ort-wasm-simd-threaded.mjs','ort-wasm-simd-threaded.jsep.wasm','ort-wasm-simd-threaded.jsep.mjs'].forEach(f=>fs.copyFileSync('node_modules/onnxruntime-web/dist/'+f, 'lib/'+f))\"",
+    "build": "npm run copy-wasm && npx esbuild src/service-worker.js --bundle --outfile=background/service-worker.js --format=iife --platform=browser --target=chrome120 --minify & npx esbuild src/offscreen.js --bundle --outfile=offscreen/offscreen.js --format=iife --platform=browser --target=chrome120 --minify",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.4"
+  }
+}

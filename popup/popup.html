@@ -13,11 +13,22 @@
       <h1 class="popup-title">ToneGuard</h1>
     </header>
     <p class="popup-subtitle">Emotion-aware feed filter</p>
-    <div class="status-badge">
-      <span class="status-dot"></span>
-      <span class="status-text">Active</span>
+
+    <div id="progress-section" class="progress-section">
+      <div class="progress-status" id="progress-status">Initializing model...</div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-bar"></div>
+      </div>
+      <div class="progress-percent" id="progress-percent">0%</div>
     </div>
-    <p class="placeholder-text">Settings coming in a future update.</p>
+
+    <div id="ready-section" class="ready-section" style="display: none;">
+      <div class="status-badge">
+        <span class="status-dot"></span>
+        <span class="status-text">Active</span>
+      </div>
+      <p class="placeholder-text">Settings coming in a future update.</p>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>

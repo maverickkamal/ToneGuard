@@ -8,3 +8,6 @@ Thumbs.db
 .env
 .vscode/
 *_*.*
+lib/
+background/service-worker.js
+offscreen/offscreen.js

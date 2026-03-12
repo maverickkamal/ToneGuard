@@ -19,11 +19,10 @@ const PLATFORM_CONFIGS = {
   }
 };
 
-const PLACEHOLDER_EMOTION = "test-placeholder";
-
 let activePlatform = null;
 let postIdCounter = 0;
 let feedObserver = null;
+let modelReady = false;
 const revealedPosts = new Set();
 
 function detectPlatform() {
@@ -65,7 +64,6 @@ function extractPostFingerprint(postElement) {
     const permalink = postElement.getAttribute("permalink")
       || postElement.getAttribute("content-href");
     if (permalink) return `reddit-${permalink}`;
-
     const idAttr = postElement.getAttribute("id");
     if (idAttr) return `reddit-${idAttr}`;
   }
@@ -124,7 +122,6 @@ function handleRevealClick(event) {
     const fingerprint = extractPostFingerprint(postElement);
     if (fingerprint) {
       revealedPosts.add(fingerprint);
-      console.log(`[ToneGuard] Revealed: ${fingerprint}`);
     }
   }
 }
@@ -148,6 +145,25 @@ function applyOverlay(postElement, fingerprint, emotions) {
   postElement.appendChild(overlay);
 }
 
+function classifyPost(postElement, postId, postText, fingerprint) {
+  chrome.runtime.sendMessage(
+    { type: "classify", id: postId, text: postText },
+    (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn("[ToneGuard] Message error:", chrome.runtime.lastError.message);
+        return;
+      }
+
+      if (!response || !response.emotions) return;
+
+      if (response.emotions.length > 0) {
+        console.log(`[ToneGuard] ${postId} flagged:`, response.emotions.join(", "));
+        applyOverlay(postElement, fingerprint, response.emotions);
+      }
+    }
+  );
+}
+
 function processPost(postElement) {
   if (postElement.hasAttribute("data-toneguard-id")) return;
 
@@ -160,9 +176,11 @@ function processPost(postElement) {
 
   const fingerprint = extractPostFingerprint(postElement);
 
-  console.log(`[ToneGuard] ${postId} (${fingerprint}):`, postText.substring(0, 120));
+  if (isPostRevealed(postElement, fingerprint)) return;
 
-  applyOverlay(postElement, fingerprint, [PLACEHOLDER_EMOTION]);
+  if (modelReady) {
+    classifyPost(postElement, postId, postText, fingerprint);
+  }
 }
 
 function scanExistingPosts() {
@@ -253,6 +271,25 @@ function watchForSPANavigation() {
   window.addEventListener("popstate", handleNavigation);
 }
 
+function waitForModel() {
+  chrome.runtime.sendMessage({ type: "ping" }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.warn("[ToneGuard] Waiting for model...");
+      setTimeout(waitForModel, 2000);
+      return;
+    }
+
+    if (response && response.ready) {
+      modelReady = true;
+      console.log("[ToneGuard] Model ready — scanning posts");
+      scanExistingPosts();
+    } else {
+      console.warn("[ToneGuard] Model not ready yet, retrying...");
+      setTimeout(waitForModel, 3000);
+    }
+  });
+}
+
 function initialize() {
   activePlatform = detectPlatform();
   if (!activePlatform) return;
@@ -261,6 +298,7 @@ function initialize() {
 
   waitForFeedContainer();
   watchForSPANavigation();
+  waitForModel();
 }
 
 initialize();
