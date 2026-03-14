@@ -37,6 +37,12 @@ function progressCallback(progressEvent) {
   } else if (progressEvent.status === 'initiate') {
     downloadProgress = { status: 'downloading', percent: 0, file: progressEvent.file || progressEvent.name || '' };
   }
+  
+  chrome.runtime.sendMessage({ 
+    target: 'background', 
+    type: 'progressUpdate', 
+    payload: downloadProgress 
+  }).catch(() => {});
 }
 
 async function loadModel() {
@@ -59,12 +65,14 @@ async function loadModel() {
       });
     } catch (wasmError) {
       downloadProgress = { status: 'error', percent: 0, file: wasmError.message };
+      chrome.runtime.sendMessage({ target: 'background', type: 'progressUpdate', payload: downloadProgress }).catch(() => {});
       throw wasmError;
     }
   }
 
   modelIsReady = true;
   downloadProgress = { status: 'ready', percent: 100, file: '' };
+  chrome.runtime.sendMessage({ target: 'background', type: 'progressUpdate', payload: downloadProgress }).catch(() => {});
   return classifier;
 }
 

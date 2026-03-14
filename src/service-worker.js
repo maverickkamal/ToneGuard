@@ -24,6 +24,26 @@ async function ensureOffscreen() {
 ensureOffscreen();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.target === 'background' && message.type === 'progressUpdate') {
+    const { status, percent } = message.payload;
+    
+    if (status === 'downloading' || status === 'loading' || status === 'initializing') {
+      chrome.action.setBadgeBackgroundColor({ color: '#e8960c' });
+      chrome.action.setBadgeText({ text: `${percent}%` });
+    } else if (status === 'ready') {
+      chrome.action.setBadgeBackgroundColor({ color: '#4caf50' });
+      chrome.action.setBadgeText({ text: 'ON' });
+      
+      setTimeout(() => {
+        chrome.action.setBadgeText({ text: '' });
+      }, 3000);
+    } else if (status === 'error') {
+      chrome.action.setBadgeBackgroundColor({ color: '#f44336' });
+      chrome.action.setBadgeText({ text: 'ERR' });
+    }
+    return false;
+  }
+
   if (message.target === 'offscreen') return false;
 
   if (message.type === 'classify' || message.type === 'ping' || message.type === 'getProgress') {

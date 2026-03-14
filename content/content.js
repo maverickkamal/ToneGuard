@@ -3,19 +3,19 @@ const PLATFORM_CONFIGS = {
     hostPatterns: ["twitter.com", "x.com"],
     postSelector: 'article[data-testid="tweet"]',
     textSelector: '[data-testid="tweetText"]',
-    feedContainerSelector: 'main [role="region"]'
+    feedContainerSelector: 'main [role="region"], div[data-testid="primaryColumn"]'
   },
   reddit: {
     hostPatterns: ["www.reddit.com"],
-    postSelector: "shreddit-post, div.thing",
-    textSelector: '[slot="text-body"], .post-content, [data-click-id="text"] p, .md p',
-    feedContainerSelector: 'shreddit-feed, .listing-page, [data-scroller-first]'
+    postSelector: "shreddit-post",
+    textSelector: '[slot="text-body"], [slot="title"]',
+    feedContainerSelector: 'shreddit-feed, main, div#main-content'
   },
   linkedin: {
     hostPatterns: ["www.linkedin.com"],
-    postSelector: "div.feed-shared-update-v2",
-    textSelector: "div.feed-shared-text",
-    feedContainerSelector: "main .scaffold-finite-scroll__content"
+    postSelector: 'div.feed-shared-update-v2, div[data-urn*="activity"]',
+    textSelector: "div.update-components-text, span.break-words, div.feed-shared-text",
+    feedContainerSelector: "main .scaffold-finite-scroll__content, div.scaffold-finite-scroll__content, main"
   }
 };
 
@@ -41,12 +41,22 @@ function detectPlatform() {
 }
 
 function extractPostText(postElement, textSelector) {
+  if (postElement.tagName && postElement.tagName.toLowerCase() === 'shreddit-post') {
+    const title = postElement.getAttribute('post-title') || '';
+    const bodyNodes = postElement.querySelectorAll('[slot="text-body"]');
+    const bodyText = Array.from(bodyNodes)
+      .map(node => node.innerText?.trim())
+      .filter(text => text && text.length > 0)
+      .join(' ');
+    return [title.trim(), bodyText].filter(t => t.length > 0).join(' ');
+  }
+
   const textNodes = postElement.querySelectorAll(textSelector);
   if (textNodes.length === 0) return "";
 
   return Array.from(textNodes)
-    .map(node => node.innerText.trim())
-    .filter(text => text.length > 0)
+    .map(node => node.innerText?.trim())
+    .filter(text => text && text.length > 0)
     .join(" ");
 }
 
@@ -74,7 +84,8 @@ function extractPostFingerprint(postElement) {
   }
 
   if (activePlatform.name === "linkedin") {
-    const urnAttr = postElement.getAttribute("data-urn");
+    const urnAttr = postElement.getAttribute("data-urn")
+      || postElement.closest('[data-urn]')?.getAttribute("data-urn");
     if (urnAttr) return `linkedin-${urnAttr}`;
   }
 
@@ -157,7 +168,6 @@ function processQueue() {
   for (const item of queueToProcess) {
     const { postElement, postId, postText, fingerprint } = item;
     
-    // Skip if element was removed from DOM while waiting
     if (!document.body.contains(postElement)) continue;
 
     chrome.runtime.sendMessage(
@@ -205,7 +215,6 @@ function processPost(postElement) {
     if (fingerprint && resultCache.has(fingerprint)) {
       const cachedEmotions = resultCache.get(fingerprint);
       
-      // Refresh LRU order
       resultCache.delete(fingerprint);
       resultCache.set(fingerprint, cachedEmotions);
       
@@ -237,19 +246,17 @@ function findFeedContainer() {
 }
 
 function handleMutations(mutations) {
+  let needsScan = false;
+  
   for (const mutation of mutations) {
-    for (const addedNode of mutation.addedNodes) {
-      if (addedNode.nodeType !== Node.ELEMENT_NODE) continue;
-
-      if (addedNode.matches && addedNode.matches(activePlatform.postSelector)) {
-        processPost(addedNode);
-      }
-
-      const nestedPosts = addedNode.querySelectorAll
-        ? addedNode.querySelectorAll(activePlatform.postSelector)
-        : [];
-      nestedPosts.forEach(processPost);
+    if (mutation.addedNodes.length > 0) {
+      needsScan = true;
+      break;
     }
+  }
+
+  if (needsScan) {
+    scanExistingPosts();
   }
 }
 
@@ -265,19 +272,19 @@ function startObserving() {
 }
 
 function waitForFeedContainer(retries = 20) {
+  scanExistingPosts();
+
   const selectors = activePlatform.feedContainerSelector.split(", ");
   const found = selectors.some(s => document.querySelector(s));
 
   if (found) {
-    scanExistingPosts();
     startObserving();
     return;
   }
 
   if (retries > 0) {
-    requestIdleCallback(() => waitForFeedContainer(retries - 1), { timeout: 1000 });
+    setTimeout(() => waitForFeedContainer(retries - 1), 500);
   } else {
-    scanExistingPosts();
     startObserving();
   }
 }
