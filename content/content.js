@@ -24,6 +24,11 @@ let postIdCounter = 0;
 let feedObserver = null;
 let modelReady = false;
 const revealedPosts = new Set();
+const maxCacheSize = 500;
+const resultCache = new Map();
+let inferenceQueue = [];
+let debounceTimer = null;
+const DEBOUNCE_MS = 300;
 
 function detectPlatform() {
   const hostname = window.location.hostname;
@@ -145,23 +150,41 @@ function applyOverlay(postElement, fingerprint, emotions) {
   postElement.appendChild(overlay);
 }
 
-function classifyPost(postElement, postId, postText, fingerprint) {
-  chrome.runtime.sendMessage(
-    { type: "classify", id: postId, text: postText },
-    (response) => {
-      if (chrome.runtime.lastError) {
-        console.warn("[ToneGuard] Message error:", chrome.runtime.lastError.message);
-        return;
-      }
+function processQueue() {
+  const queueToProcess = inferenceQueue;
+  inferenceQueue = [];
 
-      if (!response || !response.emotions) return;
+  for (const item of queueToProcess) {
+    const { postElement, postId, postText, fingerprint } = item;
+    
+    // Skip if element was removed from DOM while waiting
+    if (!document.body.contains(postElement)) continue;
 
-      if (response.emotions.length > 0) {
-        console.log(`[ToneGuard] ${postId} flagged:`, response.emotions.join(", "));
-        applyOverlay(postElement, fingerprint, response.emotions);
+    chrome.runtime.sendMessage(
+      { type: "classify", id: postId, text: postText },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn("[ToneGuard] Message error:", chrome.runtime.lastError.message);
+          return;
+        }
+
+        if (!response || !response.emotions) return;
+
+        if (fingerprint) {
+          resultCache.set(fingerprint, response.emotions);
+          if (resultCache.size > maxCacheSize) {
+            const firstKey = resultCache.keys().next().value;
+            resultCache.delete(firstKey);
+          }
+        }
+
+        if (response.emotions.length > 0) {
+          console.log(`[ToneGuard] ${postId} flagged:`, response.emotions.join(", "));
+          applyOverlay(postElement, fingerprint, response.emotions);
+        }
       }
-    }
-  );
+    );
+  }
 }
 
 function processPost(postElement) {
@@ -179,7 +202,23 @@ function processPost(postElement) {
   if (isPostRevealed(postElement, fingerprint)) return;
 
   if (modelReady) {
-    classifyPost(postElement, postId, postText, fingerprint);
+    if (fingerprint && resultCache.has(fingerprint)) {
+      const cachedEmotions = resultCache.get(fingerprint);
+      
+      // Refresh LRU order
+      resultCache.delete(fingerprint);
+      resultCache.set(fingerprint, cachedEmotions);
+      
+      if (cachedEmotions.length > 0) {
+        applyOverlay(postElement, fingerprint, cachedEmotions);
+      }
+      return;
+    }
+
+    inferenceQueue.push({ postElement, postId, postText, fingerprint });
+    
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(processQueue, DEBOUNCE_MS);
   }
 }
 
