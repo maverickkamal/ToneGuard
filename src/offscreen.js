@@ -110,11 +110,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'updateSettings') {
     if (message.settings) {
-        masterEnabled = message.settings.masterEnabled;
-        enabledEmotions = new Set(message.settings.enabledEmotions);
-    } else {
-        if (message.masterEnabled !== undefined) masterEnabled = message.masterEnabled;
-        if (message.enabledEmotions !== undefined) enabledEmotions = new Set(message.enabledEmotions);
+      masterEnabled = message.settings.masterEnabled;
+      enabledEmotions = new Set(message.settings.enabledEmotions);
     }
     sendResponse({ ok: true });
     return false;

@@ -23,14 +23,6 @@ const NEGATIVE_EMOTIONS = [
   "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness"
 ];
 
-const ALL_EMOTIONS = [
-  "admiration", "amusement", "anger", "annoyance", "approval", "caring",
-  "confusion", "curiosity", "desire", "disappointment", "disapproval",
-  "disgust", "embarrassment", "excitement", "fear", "gratitude", "grief",
-  "joy", "love", "nervousness", "optimism", "pride", "realization",
-  "relief", "remorse", "sadness", "surprise", "neutral"
-];
-
 const STATUS_LABELS = {
   idle: "Waiting to start...",
   initializing: "Initializing model...",

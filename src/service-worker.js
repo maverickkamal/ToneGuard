@@ -17,26 +17,19 @@ async function setupOffscreenDocument() {
   });
 }
 
+const DEFAULT_NEGATIVE = ["anger", "annoyance", "disappointment", "disapproval", "disgust", "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness"];
+
 chrome.runtime.onInstalled.addListener(async () => {
     await setupOffscreenDocument();
-    
+
     chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords', 'whitelistedUsernames', 'blacklistedKeywords'], (result) => {
-      if (result.masterEnabled === undefined) {
-          chrome.storage.sync.set({ masterEnabled: true });
-      }
-      if (result.enabledEmotions === undefined) {
-          const defaultNegative = ["anger", "annoyance", "disappointment", "disapproval", "disgust", "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness"];
-          chrome.storage.sync.set({ enabledEmotions: defaultNegative });
-      }
-      if (result.whitelistedKeywords === undefined) {
-          chrome.storage.sync.set({ whitelistedKeywords: [] });
-      }
-      if (result.whitelistedUsernames === undefined) {
-          chrome.storage.sync.set({ whitelistedUsernames: [] });
-      }
-      if (result.blacklistedKeywords === undefined) {
-          chrome.storage.sync.set({ blacklistedKeywords: [] });
-      }
+      const defaults = {};
+      if (result.masterEnabled === undefined) defaults.masterEnabled = true;
+      if (result.enabledEmotions === undefined) defaults.enabledEmotions = DEFAULT_NEGATIVE;
+      if (result.whitelistedKeywords === undefined) defaults.whitelistedKeywords = [];
+      if (result.whitelistedUsernames === undefined) defaults.whitelistedUsernames = [];
+      if (result.blacklistedKeywords === undefined) defaults.blacklistedKeywords = [];
+      if (Object.keys(defaults).length > 0) chrome.storage.sync.set(defaults);
     });
 });
 
@@ -46,14 +39,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.action.setBadgeText({ text: 'ON' });
       chrome.action.setBadgeBackgroundColor({ color: '#16a34a' }); 
       
-      chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords'], (result) => {
+      chrome.storage.sync.get(['masterEnabled', 'enabledEmotions'], (result) => {
           chrome.runtime.sendMessage({
               target: 'offscreen',
               type: "updateSettings",
               settings: {
                   masterEnabled: result.masterEnabled ?? true,
-                  enabledEmotions: result.enabledEmotions || [],
-                  whitelistedKeywords: result.whitelistedKeywords || []
+                  enabledEmotions: result.enabledEmotions || []
               }
           }).catch(() => {});
       });
@@ -100,15 +92,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'sync' && (changes.masterEnabled || changes.enabledEmotions || changes.whitelistedKeywords || changes.whitelistedUsernames || changes.blacklistedKeywords)) {
-         chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords', 'whitelistedUsernames', 'blacklistedKeywords'], (result) => {
+    if (namespace === 'sync' && (changes.masterEnabled || changes.enabledEmotions)) {
+         chrome.storage.sync.get(['masterEnabled', 'enabledEmotions'], (result) => {
             chrome.runtime.sendMessage({
                 target: 'offscreen',
                 type: "updateSettings",
                 settings: {
                     masterEnabled: result.masterEnabled ?? true,
-                    enabledEmotions: result.enabledEmotions || [],
-                    whitelistedKeywords: result.whitelistedKeywords || []
+                    enabledEmotions: result.enabledEmotions || []
                 }
             }).catch(() => {});
          });

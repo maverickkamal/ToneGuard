@@ -24,11 +24,14 @@ let postIdCounter = 0;
 let feedObserver = null;
 let modelReady = false;
 const revealedPosts = new Set();
+const MAX_REVEALED_SIZE = 500;
 const maxCacheSize = 500;
 const resultCache = new Map();
 let inferenceQueue = [];
 let debounceTimer = null;
+let scanDebounceTimer = null;
 const DEBOUNCE_MS = 300;
+const SCAN_DEBOUNCE_MS = 150;
 
 let whitelistedKeywords = [];
 let whitelistedUsernames = [];
@@ -135,7 +138,7 @@ function loadFilterSettings() {
   });
 }
 
-function extractPostFingerprint(postElement) {
+function extractPostFingerprint(postElement, preExtractedText) {
   if (activePlatform.name === "twitter") {
     const permalinkEl = postElement.querySelector('a[href*="/status/"] time')?.parentElement
       || postElement.querySelector('a[href*="/status/"]');
@@ -160,8 +163,8 @@ function extractPostFingerprint(postElement) {
     if (urnAttr) return `linkedin-${urnAttr}`;
   }
 
-  const postText = extractPostText(postElement, activePlatform.textSelector);
-  if (postText.length > 0) return `text-${normalizeText(postText)}`;
+  const text = preExtractedText ?? extractPostText(postElement, activePlatform.textSelector);
+  if (text.length > 0) return `text-${normalizeText(text)}`;
 
   return null;
 }
@@ -206,8 +209,12 @@ function handleRevealClick(event) {
 
   if (postElement) {
     postElement.setAttribute("data-toneguard-revealed", "true");
-    const fingerprint = extractPostFingerprint(postElement);
+    const fingerprint = extractPostFingerprint(postElement, null);
     if (fingerprint) {
+      if (revealedPosts.size >= MAX_REVEALED_SIZE) {
+        const oldest = revealedPosts.values().next().value;
+        revealedPosts.delete(oldest);
+      }
       revealedPosts.add(fingerprint);
     }
   }
@@ -223,8 +230,7 @@ function applyOverlay(postElement, fingerprint, emotions) {
   if (isPostRevealed(postElement, fingerprint)) return;
   if (postElement.querySelector(".toneguard-overlay")) return;
 
-  const computedPosition = window.getComputedStyle(postElement).position;
-  if (computedPosition === "static") {
+  if (!postElement.style.position) {
     postElement.style.position = "relative";
   }
 
@@ -278,7 +284,7 @@ function processPost(postElement) {
   const postId = `post-${postIdCounter}`;
   postElement.setAttribute("data-toneguard-id", postId);
 
-  const fingerprint = extractPostFingerprint(postElement);
+  const fingerprint = extractPostFingerprint(postElement, postText);
 
   if (isPostRevealed(postElement, fingerprint)) return;
 
@@ -325,17 +331,12 @@ function findFeedContainer() {
 }
 
 function handleMutations(mutations) {
-  let needsScan = false;
-  
   for (const mutation of mutations) {
     if (mutation.addedNodes.length > 0) {
-      needsScan = true;
-      break;
+      if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
+      scanDebounceTimer = setTimeout(scanExistingPosts, SCAN_DEBOUNCE_MS);
+      return;
     }
-  }
-
-  if (needsScan) {
-    scanExistingPosts();
   }
 }
 
@@ -377,6 +378,10 @@ function handleNavigation() {
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
+  }
+  if (scanDebounceTimer) {
+    clearTimeout(scanDebounceTimer);
+    scanDebounceTimer = null;
   }
   inferenceQueue = [];
 
