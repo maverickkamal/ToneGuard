@@ -14,6 +14,10 @@ const keywordInput = document.getElementById("keyword-input");
 const keywordAddBtn = document.getElementById("keyword-add-btn");
 const keywordPillsContainer = document.getElementById("keyword-pills");
 
+const blacklistInput = document.getElementById("blacklist-input");
+const blacklistAddBtn = document.getElementById("blacklist-add-btn");
+const blacklistPillsContainer = document.getElementById("blacklist-pills");
+
 const NEGATIVE_EMOTIONS = [
   "anger", "annoyance", "disappointment", "disapproval", "disgust",
   "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness"
@@ -35,14 +39,15 @@ const STATUS_LABELS = {
   ready: "Model ready"
 };
 
-const STORAGE_KEYS = ["masterEnabled", "enabledEmotions", "whitelistedKeywords", "whitelistedUsernames"];
+const STORAGE_KEYS = ["masterEnabled", "enabledEmotions", "whitelistedKeywords", "whitelistedUsernames", "blacklistedKeywords"];
 
 function getDefaults() {
   return {
     masterEnabled: true,
     enabledEmotions: [...NEGATIVE_EMOTIONS],
     whitelistedKeywords: [],
-    whitelistedUsernames: []
+    whitelistedUsernames: [],
+    blacklistedKeywords: []
   };
 }
 
@@ -56,7 +61,8 @@ async function loadSettings() {
         masterEnabled: data.masterEnabled ?? defaults.masterEnabled,
         enabledEmotions: data.enabledEmotions || defaults.enabledEmotions,
         whitelistedKeywords: data.whitelistedKeywords || [],
-        whitelistedUsernames: data.whitelistedUsernames || []
+        whitelistedUsernames: data.whitelistedUsernames || [],
+        blacklistedKeywords: data.blacklistedKeywords || []
       };
 
       if (needsInit) {
@@ -88,6 +94,7 @@ function applySettingsToUI(settings) {
 
   renderUsernamePills(settings.whitelistedUsernames);
   renderKeywordPills(settings.whitelistedKeywords);
+  renderBlacklistPills(settings.blacklistedKeywords);
 }
 
 function updateMasterState(enabled) {
@@ -250,6 +257,67 @@ usernameInput.addEventListener("keydown", (e) => {
 keywordAddBtn.addEventListener("click", addKeyword);
 keywordInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addKeyword();
+});
+
+function renderBlacklistPills(keywords) {
+  blacklistPillsContainer.innerHTML = "";
+  if (keywords.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "blacklist-empty";
+    empty.textContent = "No words blacklisted";
+    blacklistPillsContainer.appendChild(empty);
+    return;
+  }
+  keywords.forEach(keyword => {
+    const pill = document.createElement("div");
+    pill.className = "blacklist-pill";
+
+    const text = document.createElement("span");
+    text.className = "blacklist-pill-text";
+    text.textContent = keyword;
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "remove-btn";
+    removeBtn.innerHTML = "&times;";
+    removeBtn.addEventListener("click", () => removeBlacklistKeyword(keyword));
+
+    pill.appendChild(text);
+    pill.appendChild(removeBtn);
+    blacklistPillsContainer.appendChild(pill);
+  });
+}
+
+function addBlacklistKeyword() {
+  const keyword = blacklistInput.value.trim();
+  if (!keyword) return;
+
+  chrome.storage.sync.get(["blacklistedKeywords"], (data) => {
+    const keywords = data.blacklistedKeywords || [];
+    const exists = keywords.some(k => k.toLowerCase() === keyword.toLowerCase());
+    if (exists) {
+      blacklistInput.value = "";
+      return;
+    }
+    keywords.push(keyword);
+    chrome.storage.sync.set({ blacklistedKeywords: keywords }, () => {
+      renderBlacklistPills(keywords);
+      blacklistInput.value = "";
+    });
+  });
+}
+
+function removeBlacklistKeyword(keywordToRemove) {
+  chrome.storage.sync.get(["blacklistedKeywords"], (data) => {
+    const keywords = (data.blacklistedKeywords || []).filter(k => k !== keywordToRemove);
+    chrome.storage.sync.set({ blacklistedKeywords: keywords }, () => {
+      renderBlacklistPills(keywords);
+    });
+  });
+}
+
+blacklistAddBtn.addEventListener("click", addBlacklistKeyword);
+blacklistInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") addBlacklistKeyword();
 });
 
 function updateProgressUI(progress) {

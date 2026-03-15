@@ -32,6 +32,7 @@ const DEBOUNCE_MS = 300;
 
 let whitelistedKeywords = [];
 let whitelistedUsernames = [];
+let blacklistedKeywords = [];
 
 function detectPlatform() {
   const hostname = window.location.hostname;
@@ -118,10 +119,19 @@ function isWhitelisted(postElement, postText) {
   return false;
 }
 
-function loadWhitelistSettings() {
-  chrome.storage.sync.get(["whitelistedKeywords", "whitelistedUsernames"], (data) => {
+function getBlacklistMatch(postText) {
+  const normalizedPost = postText.toLowerCase();
+  for (const keyword of blacklistedKeywords) {
+    if (normalizedPost.includes(keyword)) return keyword;
+  }
+  return null;
+}
+
+function loadFilterSettings() {
+  chrome.storage.sync.get(["whitelistedKeywords", "whitelistedUsernames", "blacklistedKeywords"], (data) => {
     whitelistedKeywords = (data.whitelistedKeywords || []).map(k => k.toLowerCase());
     whitelistedUsernames = (data.whitelistedUsernames || []).map(u => u.toLowerCase());
+    blacklistedKeywords = (data.blacklistedKeywords || []).map(k => k.toLowerCase());
   });
 }
 
@@ -272,6 +282,12 @@ function processPost(postElement) {
 
   if (isPostRevealed(postElement, fingerprint)) return;
 
+  const blacklistMatch = getBlacklistMatch(postText);
+  if (blacklistMatch) {
+    applyOverlay(postElement, fingerprint, [`blocked: "${blacklistMatch}"`]);
+    return;
+  }
+
   if (isWhitelisted(postElement, postText)) return;
 
   if (modelReady) {
@@ -358,26 +374,47 @@ function handleNavigation() {
     feedObserver = null;
   }
 
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  inferenceQueue = [];
+
   waitForFeedContainer();
 }
 
 function watchForSPANavigation() {
   let lastUrl = window.location.href;
 
-  const navigationObserver = new MutationObserver(() => {
-    if (window.location.href !== lastUrl) {
-      lastUrl = window.location.href;
+  function onUrlChange() {
+    const currentUrl = window.location.href;
+    if (currentUrl !== lastUrl) {
+      lastUrl = currentUrl;
       handleNavigation();
     }
-  });
+  }
 
-  navigationObserver.observe(document.querySelector("head > title") || document.head, {
+  const originalPushState = history.pushState;
+  history.pushState = function (...args) {
+    originalPushState.apply(this, args);
+    onUrlChange();
+  };
+
+  const originalReplaceState = history.replaceState;
+  history.replaceState = function (...args) {
+    originalReplaceState.apply(this, args);
+    onUrlChange();
+  };
+
+  window.addEventListener("popstate", onUrlChange);
+
+  const titleTarget = document.querySelector("head > title") || document.head;
+  const navigationObserver = new MutationObserver(onUrlChange);
+  navigationObserver.observe(titleTarget, {
     childList: true,
     subtree: true,
     characterData: true
   });
-
-  window.addEventListener("popstate", handleNavigation);
 }
 
 function waitForModel() {
@@ -407,6 +444,9 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
   if (changes.whitelistedUsernames) {
     whitelistedUsernames = (changes.whitelistedUsernames.newValue || []).map(u => u.toLowerCase());
   }
+  if (changes.blacklistedKeywords) {
+    blacklistedKeywords = (changes.blacklistedKeywords.newValue || []).map(k => k.toLowerCase());
+  }
 });
 
 function initialize() {
@@ -415,7 +455,7 @@ function initialize() {
 
   console.log(`[ToneGuard] Active on ${activePlatform.name}`);
 
-  loadWhitelistSettings();
+  loadFilterSettings();
   waitForFeedContainer();
   watchForSPANavigation();
   waitForModel();

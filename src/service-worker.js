@@ -20,7 +20,7 @@ async function setupOffscreenDocument() {
 chrome.runtime.onInstalled.addListener(async () => {
     await setupOffscreenDocument();
     
-    chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords', 'whitelistedUsernames'], (result) => {
+    chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords', 'whitelistedUsernames', 'blacklistedKeywords'], (result) => {
       if (result.masterEnabled === undefined) {
           chrome.storage.sync.set({ masterEnabled: true });
       }
@@ -34,6 +34,9 @@ chrome.runtime.onInstalled.addListener(async () => {
       if (result.whitelistedUsernames === undefined) {
           chrome.storage.sync.set({ whitelistedUsernames: [] });
       }
+      if (result.blacklistedKeywords === undefined) {
+          chrome.storage.sync.set({ blacklistedKeywords: [] });
+      }
     });
 });
 
@@ -41,7 +44,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'model_progress') {
     if (message.status === 'ready') {
       chrome.action.setBadgeText({ text: 'ON' });
-      chrome.action.setBadgeBackgroundColor({ color: '#16a34a' }); // Green
+      chrome.action.setBadgeBackgroundColor({ color: '#16a34a' }); 
       
       chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords'], (result) => {
           chrome.runtime.sendMessage({
@@ -56,11 +59,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     } else if (message.status === 'error') {
       chrome.action.setBadgeText({ text: 'ERR' });
-      chrome.action.setBadgeBackgroundColor({ color: '#dc2626' }); // Red
+      chrome.action.setBadgeBackgroundColor({ color: '#dc2626' }); 
     } else if (message.progress) {
       const percentage = Math.round(message.progress * 100);
       chrome.action.setBadgeText({ text: `${percentage}%` });
-      chrome.action.setBadgeBackgroundColor({ color: '#d97706' }); // Amber
+      chrome.action.setBadgeBackgroundColor({ color: '#d97706' }); 
     }
     return false;
   }
@@ -89,17 +92,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } else if (message.type === 'ping') {
         sendResponse({ ready: false });
       } else {
-        // Fallback
         sendResponse({ status: 'error' });
       }
     });
-    return true; // Keep channel open for async response
+    return true; 
   }
 });
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'sync' && (changes.masterEnabled || changes.enabledEmotions || changes.whitelistedKeywords || changes.whitelistedUsernames)) {
-         chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords', 'whitelistedUsernames'], (result) => {
+    if (namespace === 'sync' && (changes.masterEnabled || changes.enabledEmotions || changes.whitelistedKeywords || changes.whitelistedUsernames || changes.blacklistedKeywords)) {
+         chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords', 'whitelistedUsernames', 'blacklistedKeywords'], (result) => {
             chrome.runtime.sendMessage({
                 target: 'offscreen',
                 type: "updateSettings",

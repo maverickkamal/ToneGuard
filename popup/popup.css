@@ -472,7 +472,170 @@ body {
   padding: 4px 0;
 }
 
-.ready-section.disabled .whitelist-section {
+.ready-section.disabled .whitelist-section,
+.ready-section.disabled .blacklist-section {
   opacity: 0.35;
   pointer-events: none;
+}
+
+.blacklist-section {
+  width: 100%;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.blacklist-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ddd;
+  margin-bottom: 12px;
+  letter-spacing: 0.3px;
+}
+
+.blacklist-subsection {
+  background: rgba(220, 38, 38, 0.04);
+  border: 1px solid rgba(220, 38, 38, 0.12);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.blacklist-subsection-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ccc;
+  margin-bottom: 4px;
+}
+
+.blacklist-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(220, 38, 38, 0.12);
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.blacklist-hint {
+  font-size: 11px;
+  color: #777;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.blacklist-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+
+.blacklist-input-group input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px 0 0 8px;
+  color: #f5f5f5;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+  min-width: 0;
+}
+
+.blacklist-input-group input:focus {
+  border-color: rgba(220, 38, 38, 0.5);
+}
+
+.blacklist-input-group input::placeholder {
+  color: #555;
+}
+
+.blacklist-add-btn {
+  height: 32px;
+  padding: 0 14px;
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.blacklist-add-btn:hover {
+  background: rgba(220, 38, 38, 0.25);
+}
+
+.blacklist-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.blacklist-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  color: #ef4444;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.blacklist-pill .blacklist-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blacklist-pill .remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(220, 38, 38, 0.15);
+  color: #ef4444;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.blacklist-pill .remove-btn:hover {
+  background: rgba(220, 38, 38, 0.4);
+  color: #fca5a5;
+}
+
+.blacklist-empty {
+  font-size: 11px;
+  color: #555;
+  font-style: italic;
+  padding: 4px 0;
 }
