@@ -1,56 +1,85 @@
-let offscreenReady = false;
+const OFFSCREEN_DOCUMENT_PATH = '/offscreen/offscreen.html';
 
-async function ensureOffscreen() {
-  if (offscreenReady) return;
-
+async function hasOffscreenDocument() {
   const existingContexts = await chrome.runtime.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT']
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH)]
   });
-
-  if (existingContexts.length > 0) {
-    offscreenReady = true;
-    return;
-  }
-
-  await chrome.offscreen.createDocument({
-    url: 'offscreen/offscreen.html',
-    reasons: ['WORKERS'],
-    justification: 'Run Transformers.js NLP inference with WebGPU/WASM support'
-  });
-
-  offscreenReady = true;
+  return existingContexts.length > 0;
 }
 
-ensureOffscreen();
+async function setupOffscreenDocument() {
+  if (await hasOffscreenDocument()) return;
+  await chrome.offscreen.createDocument({
+    url: OFFSCREEN_DOCUMENT_PATH,
+    reasons: [chrome.offscreen.Reason.WORKERS],
+    justification: 'Run AI model inference via WebGPU'
+  });
+}
+
+chrome.runtime.onInstalled.addListener(async () => {
+    await setupOffscreenDocument();
+    
+    chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords', 'whitelistedUsernames'], (result) => {
+      if (result.masterEnabled === undefined) {
+          chrome.storage.sync.set({ masterEnabled: true });
+      }
+      if (result.enabledEmotions === undefined) {
+          const defaultNegative = ["anger", "annoyance", "disappointment", "disapproval", "disgust", "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness"];
+          chrome.storage.sync.set({ enabledEmotions: defaultNegative });
+      }
+      if (result.whitelistedKeywords === undefined) {
+          chrome.storage.sync.set({ whitelistedKeywords: [] });
+      }
+      if (result.whitelistedUsernames === undefined) {
+          chrome.storage.sync.set({ whitelistedUsernames: [] });
+      }
+    });
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.target === 'background' && message.type === 'progressUpdate') {
-    const { status, percent } = message.payload;
-    
-    if (status === 'downloading' || status === 'loading' || status === 'initializing') {
-      chrome.action.setBadgeBackgroundColor({ color: '#e8960c' });
-      chrome.action.setBadgeText({ text: `${percent}%` });
-    } else if (status === 'ready') {
-      chrome.action.setBadgeBackgroundColor({ color: '#4caf50' });
+  if (message.type === 'model_progress') {
+    if (message.status === 'ready') {
       chrome.action.setBadgeText({ text: 'ON' });
+      chrome.action.setBadgeBackgroundColor({ color: '#16a34a' }); // Green
       
-      setTimeout(() => {
-        chrome.action.setBadgeText({ text: '' });
-      }, 3000);
-    } else if (status === 'error') {
-      chrome.action.setBadgeBackgroundColor({ color: '#f44336' });
+      chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords'], (result) => {
+          chrome.runtime.sendMessage({
+              target: 'offscreen',
+              type: "updateSettings",
+              settings: {
+                  masterEnabled: result.masterEnabled ?? true,
+                  enabledEmotions: result.enabledEmotions || [],
+                  whitelistedKeywords: result.whitelistedKeywords || []
+              }
+          }).catch(() => {});
+      });
+    } else if (message.status === 'error') {
       chrome.action.setBadgeText({ text: 'ERR' });
+      chrome.action.setBadgeBackgroundColor({ color: '#dc2626' }); // Red
+    } else if (message.progress) {
+      const percentage = Math.round(message.progress * 100);
+      chrome.action.setBadgeText({ text: `${percentage}%` });
+      chrome.action.setBadgeBackgroundColor({ color: '#d97706' }); // Amber
     }
     return false;
   }
 
-  if (message.target === 'offscreen') return false;
-
   if (message.type === 'classify' || message.type === 'ping' || message.type === 'getProgress') {
-    ensureOffscreen().then(() => {
+    setupOffscreenDocument().then(() => {
       chrome.runtime.sendMessage(
         { ...message, target: 'offscreen' },
         (response) => {
+          if (chrome.runtime.lastError) {
+            if (message.type === 'classify') {
+              sendResponse({ id: message.id, emotions: [] });
+            } else if (message.type === 'ping') {
+              sendResponse({ ready: false });
+            } else {
+              sendResponse({ status: 'error' });
+            }
+            return;
+          }
           sendResponse(response);
         }
       );
@@ -60,9 +89,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } else if (message.type === 'ping') {
         sendResponse({ ready: false });
       } else {
-        sendResponse({ status: 'error', percent: 0, file: error.message });
+        // Fallback
+        sendResponse({ status: 'error' });
       }
     });
-    return true;
+    return true; // Keep channel open for async response
   }
+});
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'sync' && (changes.masterEnabled || changes.enabledEmotions || changes.whitelistedKeywords || changes.whitelistedUsernames)) {
+         chrome.storage.sync.get(['masterEnabled', 'enabledEmotions', 'whitelistedKeywords', 'whitelistedUsernames'], (result) => {
+            chrome.runtime.sendMessage({
+                target: 'offscreen',
+                type: "updateSettings",
+                settings: {
+                    masterEnabled: result.masterEnabled ?? true,
+                    enabledEmotions: result.enabledEmotions || [],
+                    whitelistedKeywords: result.whitelistedKeywords || []
+                }
+            }).catch(() => {});
+         });
+    }
 });

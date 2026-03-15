@@ -11,18 +11,24 @@ ort.env.wasm.wasmPaths = localLibPath;
 const MODEL_NAME = 'kamaludeen/multilingual_go_emotions-ONNX';
 
 const THRESHOLDS = {
-  admiration: 0.4,    amusement: 0.35,   anger: 0.35,        annoyance: 0.15,
+  admiration: 0.4,    amusement: 0.35,   anger: 0.15,        annoyance: 0.1,
   approval: 0.2,      caring: 0.15,      confusion: 0.25,    curiosity: 0.25,
-  desire: 0.25,       disappointment: 0.15, disapproval: 0.25, disgust: 0.15,
-  embarrassment: 0.1, excitement: 0.15,  fear: 0.35,         gratitude: 0.4,
+  desire: 0.25,       disappointment: 0.1, disapproval: 0.15,  disgust: 0.15,
+  embarrassment: 0.1, excitement: 0.15,  fear: 0.15,         gratitude: 0.4,
   grief: 0.05,        joy: 0.25,         love: 0.35,         nervousness: 0.1,
   optimism: 0.25,     pride: 0.05,       realization: 0.15,  relief: 0.05,
-  remorse: 0.15,      sadness: 0.4,      surprise: 0.3,      neutral: 0.2
+  remorse: 0.15,      sadness: 0.15,     surprise: 0.3,      neutral: 0.2
 };
 
 let classifier = null;
 let modelIsReady = false;
 let downloadProgress = { status: 'idle', percent: 0, file: '' };
+
+let masterEnabled = true;
+let enabledEmotions = new Set([
+  'anger', 'annoyance', 'disappointment', 'disapproval', 'disgust',
+  'embarrassment', 'fear', 'grief', 'nervousness', 'remorse', 'sadness'
+]);
 
 function progressCallback(progressEvent) {
   if (progressEvent.status === 'progress') {
@@ -39,9 +45,9 @@ function progressCallback(progressEvent) {
   }
   
   chrome.runtime.sendMessage({ 
-    target: 'background', 
-    type: 'progressUpdate', 
-    payload: downloadProgress 
+    type: 'model_progress', 
+    status: downloadProgress.status,
+    progress: downloadProgress.percent / 100
   }).catch(() => {});
 }
 
@@ -53,6 +59,7 @@ async function loadModel() {
   try {
     classifier = await pipeline('text-classification', MODEL_NAME, {
       device: 'webgpu',
+      dtype: 'fp32',
       topk: null,
       progress_callback: progressCallback
     });
@@ -65,14 +72,14 @@ async function loadModel() {
       });
     } catch (wasmError) {
       downloadProgress = { status: 'error', percent: 0, file: wasmError.message };
-      chrome.runtime.sendMessage({ target: 'background', type: 'progressUpdate', payload: downloadProgress }).catch(() => {});
+      chrome.runtime.sendMessage({ type: 'model_progress', status: 'error' }).catch(() => {});
       throw wasmError;
     }
   }
 
   modelIsReady = true;
   downloadProgress = { status: 'ready', percent: 100, file: '' };
-  chrome.runtime.sendMessage({ target: 'background', type: 'progressUpdate', payload: downloadProgress }).catch(() => {});
+  chrome.runtime.sendMessage({ type: 'model_progress', status: 'ready' }).catch(() => {});
   return classifier;
 }
 
@@ -81,7 +88,7 @@ function applyThresholds(results) {
   for (const result of results) {
     const emotion = result.label;
     const threshold = THRESHOLDS[emotion];
-    if (threshold !== undefined && result.score >= threshold) {
+    if (threshold !== undefined && result.score >= threshold && enabledEmotions.has(emotion)) {
       triggered.push(emotion);
     }
   }
@@ -89,6 +96,8 @@ function applyThresholds(results) {
 }
 
 async function classifyText(text) {
+  if (!masterEnabled) return [];
+
   const model = await loadModel();
   const results = await model(text, { topk: null });
   return applyThresholds(results);
@@ -98,6 +107,18 @@ loadModel().catch(() => {});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== 'offscreen') return false;
+
+  if (message.type === 'updateSettings') {
+    if (message.settings) {
+        masterEnabled = message.settings.masterEnabled;
+        enabledEmotions = new Set(message.settings.enabledEmotions);
+    } else {
+        if (message.masterEnabled !== undefined) masterEnabled = message.masterEnabled;
+        if (message.enabledEmotions !== undefined) enabledEmotions = new Set(message.enabledEmotions);
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
 
   if (message.type === 'classify') {
     if (!modelIsReady) {

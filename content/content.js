@@ -13,8 +13,8 @@ const PLATFORM_CONFIGS = {
   },
   linkedin: {
     hostPatterns: ["www.linkedin.com"],
-    postSelector: 'div.feed-shared-update-v2, div[data-urn*="activity"]',
-    textSelector: "div.update-components-text, span.break-words, div.feed-shared-text",
+    postSelector: '[data-urn], .feed-shared-update-v2, .occludable-update, article',
+    textSelector: '.update-components-text, .feed-shared-text, [dir="ltr"], span.break-words, .attributed-text-segment-list__content',
     feedContainerSelector: "main .scaffold-finite-scroll__content, div.scaffold-finite-scroll__content, main"
   }
 };
@@ -29,6 +29,9 @@ const resultCache = new Map();
 let inferenceQueue = [];
 let debounceTimer = null;
 const DEBOUNCE_MS = 300;
+
+let whitelistedKeywords = [];
+let whitelistedUsernames = [];
 
 function detectPlatform() {
   const hostname = window.location.hostname;
@@ -62,6 +65,64 @@ function extractPostText(postElement, textSelector) {
 
 function normalizeText(text) {
   return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function extractPostUsername(postElement) {
+  if (!activePlatform) return null;
+
+  if (activePlatform.name === "twitter") {
+    const userNameContainer = postElement.querySelector('[data-testid="User-Name"]');
+    if (userNameContainer) {
+      const links = userNameContainer.querySelectorAll('a[role="link"]');
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        if (href && /^\/[A-Za-z0-9_]+$/.test(href)) {
+          return href.slice(1).toLowerCase();
+        }
+      }
+    }
+  }
+
+  if (activePlatform.name === "reddit") {
+    const author = postElement.getAttribute("author");
+    if (author) return author.toLowerCase();
+    const authorLink = postElement.querySelector('a[href*="/user/"]');
+    if (authorLink) {
+      const match = authorLink.getAttribute("href").match(/\/user\/([^/?#]+)/);
+      if (match) return match[1].toLowerCase();
+    }
+  }
+
+  if (activePlatform.name === "linkedin") {
+    const actorLink = postElement.querySelector(
+      'a.app-aware-link[href*="/in/"], .update-components-actor a[href*="/in/"], .feed-shared-actor a[href*="/in/"]'
+    );
+    if (actorLink) {
+      const match = actorLink.getAttribute("href").match(/\/in\/([^/?#]+)/);
+      if (match) return match[1].toLowerCase();
+    }
+  }
+
+  return null;
+}
+
+function isWhitelisted(postElement, postText) {
+  const username = extractPostUsername(postElement);
+  if (username && whitelistedUsernames.includes(username)) return true;
+
+  const normalizedPost = postText.toLowerCase();
+  for (const keyword of whitelistedKeywords) {
+    if (normalizedPost.includes(keyword)) return true;
+  }
+
+  return false;
+}
+
+function loadWhitelistSettings() {
+  chrome.storage.sync.get(["whitelistedKeywords", "whitelistedUsernames"], (data) => {
+    whitelistedKeywords = (data.whitelistedKeywords || []).map(k => k.toLowerCase());
+    whitelistedUsernames = (data.whitelistedUsernames || []).map(u => u.toLowerCase());
+  });
 }
 
 function extractPostFingerprint(postElement) {
@@ -211,6 +272,8 @@ function processPost(postElement) {
 
   if (isPostRevealed(postElement, fingerprint)) return;
 
+  if (isWhitelisted(postElement, postText)) return;
+
   if (modelReady) {
     if (fingerprint && resultCache.has(fingerprint)) {
       const cachedEmotions = resultCache.get(fingerprint);
@@ -336,12 +399,23 @@ function waitForModel() {
   });
 }
 
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace !== "sync") return;
+  if (changes.whitelistedKeywords) {
+    whitelistedKeywords = (changes.whitelistedKeywords.newValue || []).map(k => k.toLowerCase());
+  }
+  if (changes.whitelistedUsernames) {
+    whitelistedUsernames = (changes.whitelistedUsernames.newValue || []).map(u => u.toLowerCase());
+  }
+});
+
 function initialize() {
   activePlatform = detectPlatform();
   if (!activePlatform) return;
 
   console.log(`[ToneGuard] Active on ${activePlatform.name}`);
 
+  loadWhitelistSettings();
   waitForFeedContainer();
   watchForSPANavigation();
   waitForModel();

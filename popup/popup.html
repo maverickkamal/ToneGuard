@@ -23,11 +23,101 @@
     </div>
 
     <div id="ready-section" class="ready-section" style="display: none;">
-      <div class="status-badge">
-        <span class="status-dot"></span>
-        <span class="status-text">Active</span>
+      <div class="master-row">
+        <div class="status-badge">
+          <span class="status-dot"></span>
+          <span class="status-text">Active</span>
+        </div>
+        <label class="toggle-switch" title="Master on/off">
+          <input type="checkbox" id="master-toggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
       </div>
-      <p class="placeholder-text">Settings coming in a future update.</p>
+
+      <div class="clusters" id="clusters">
+        <details class="cluster" open>
+          <summary class="cluster-header">😠 Negative</summary>
+          <div class="emotion-pills" data-cluster="negative">
+            <button class="emotion-pill active" data-emotion="anger">anger</button>
+            <button class="emotion-pill active" data-emotion="annoyance">annoyance</button>
+            <button class="emotion-pill active" data-emotion="disappointment">disappointment</button>
+            <button class="emotion-pill active" data-emotion="disapproval">disapproval</button>
+            <button class="emotion-pill active" data-emotion="disgust">disgust</button>
+            <button class="emotion-pill active" data-emotion="embarrassment">embarrassment</button>
+            <button class="emotion-pill active" data-emotion="fear">fear</button>
+            <button class="emotion-pill active" data-emotion="grief">grief</button>
+            <button class="emotion-pill active" data-emotion="nervousness">nervousness</button>
+            <button class="emotion-pill active" data-emotion="remorse">remorse</button>
+            <button class="emotion-pill active" data-emotion="sadness">sadness</button>
+          </div>
+        </details>
+
+        <details class="cluster">
+          <summary class="cluster-header">😊 Positive</summary>
+          <div class="emotion-pills" data-cluster="positive">
+            <button class="emotion-pill" data-emotion="admiration">admiration</button>
+            <button class="emotion-pill" data-emotion="amusement">amusement</button>
+            <button class="emotion-pill" data-emotion="approval">approval</button>
+            <button class="emotion-pill" data-emotion="caring">caring</button>
+            <button class="emotion-pill" data-emotion="excitement">excitement</button>
+            <button class="emotion-pill" data-emotion="gratitude">gratitude</button>
+            <button class="emotion-pill" data-emotion="joy">joy</button>
+            <button class="emotion-pill" data-emotion="love">love</button>
+            <button class="emotion-pill" data-emotion="optimism">optimism</button>
+            <button class="emotion-pill" data-emotion="pride">pride</button>
+            <button class="emotion-pill" data-emotion="relief">relief</button>
+          </div>
+        </details>
+
+        <details class="cluster">
+          <summary class="cluster-header">🤔 Ambiguous</summary>
+          <div class="emotion-pills" data-cluster="ambiguous">
+            <button class="emotion-pill" data-emotion="confusion">confusion</button>
+            <button class="emotion-pill" data-emotion="curiosity">curiosity</button>
+            <button class="emotion-pill" data-emotion="desire">desire</button>
+            <button class="emotion-pill" data-emotion="realization">realization</button>
+            <button class="emotion-pill" data-emotion="surprise">surprise</button>
+          </div>
+        </details>
+
+        <details class="cluster">
+          <summary class="cluster-header">😐 Neutral</summary>
+          <div class="emotion-pills" data-cluster="neutral">
+            <button class="emotion-pill" data-emotion="neutral">neutral</button>
+          </div>
+        </details>
+      </div>
+
+      <div class="whitelist-section">
+        <h2 class="whitelist-title">Whitelists</h2>
+
+        <div class="whitelist-subsection">
+          <div class="whitelist-subsection-header">
+            <span class="whitelist-icon">@</span>
+            <span>Users</span>
+          </div>
+          <p class="whitelist-hint">Posts from these users are never hidden.</p>
+          <div class="whitelist-input-group">
+            <span class="input-prefix">@</span>
+            <input type="text" id="username-input" placeholder="username">
+            <button id="username-add-btn" class="whitelist-add-btn">Add</button>
+          </div>
+          <div class="whitelist-pills" id="username-pills"></div>
+        </div>
+
+        <div class="whitelist-subsection">
+          <div class="whitelist-subsection-header">
+            <span class="whitelist-icon">🔑</span>
+            <span>Keywords</span>
+          </div>
+          <p class="whitelist-hint">Posts containing these words skip filtering.</p>
+          <div class="whitelist-input-group">
+            <input type="text" id="keyword-input" placeholder="keyword or phrase">
+            <button id="keyword-add-btn" class="whitelist-add-btn">Add</button>
+          </div>
+          <div class="whitelist-pills" id="keyword-pills"></div>
+        </div>
+      </div>
     </div>
   </div>
   <script src="popup.js"></script>
