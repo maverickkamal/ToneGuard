@@ -23,6 +23,7 @@ let activePlatform = null;
 let postIdCounter = 0;
 let feedObserver = null;
 let modelReady = false;
+let extensionValid = true;
 const revealedPosts = new Set();
 const MAX_REVEALED_SIZE = 500;
 const maxCacheSize = 500;
@@ -36,6 +37,46 @@ const SCAN_DEBOUNCE_MS = 150;
 let whitelistedKeywords = [];
 let whitelistedUsernames = [];
 let blacklistedKeywords = [];
+
+function isExtensionContextValid() {
+  try {
+    return !!chrome.runtime?.id;
+  } catch {
+    return false;
+  }
+}
+
+function teardown() {
+  extensionValid = false;
+  if (feedObserver) { feedObserver.disconnect(); feedObserver = null; }
+  if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+  if (scanDebounceTimer) { clearTimeout(scanDebounceTimer); scanDebounceTimer = null; }
+  inferenceQueue = [];
+}
+
+function safeSendMessage(message, callback) {
+  if (!extensionValid) return;
+  if (!isExtensionContextValid()) {
+    teardown();
+    return;
+  }
+  try {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        const errMsg = chrome.runtime.lastError.message || '';
+        if (errMsg.includes('Extension context invalidated')) {
+          teardown();
+          return;
+        }
+        callback?.(null);
+        return;
+      }
+      callback?.(response);
+    });
+  } catch {
+    teardown();
+  }
+}
 
 function detectPlatform() {
   const hostname = window.location.hostname;
@@ -131,11 +172,17 @@ function getBlacklistMatch(postText) {
 }
 
 function loadFilterSettings() {
-  chrome.storage.sync.get(["whitelistedKeywords", "whitelistedUsernames", "blacklistedKeywords"], (data) => {
-    whitelistedKeywords = (data.whitelistedKeywords || []).map(k => k.toLowerCase());
-    whitelistedUsernames = (data.whitelistedUsernames || []).map(u => u.toLowerCase());
-    blacklistedKeywords = (data.blacklistedKeywords || []).map(k => k.toLowerCase());
-  });
+  if (!extensionValid) return;
+  try {
+    chrome.storage.sync.get(["whitelistedKeywords", "whitelistedUsernames", "blacklistedKeywords"], (data) => {
+      if (chrome.runtime.lastError) return;
+      whitelistedKeywords = (data.whitelistedKeywords || []).map(k => k.toLowerCase());
+      whitelistedUsernames = (data.whitelistedUsernames || []).map(u => u.toLowerCase());
+      blacklistedKeywords = (data.blacklistedKeywords || []).map(k => k.toLowerCase());
+    });
+  } catch {
+    teardown();
+  }
 }
 
 function extractPostFingerprint(postElement, preExtractedText) {
@@ -239,22 +286,19 @@ function applyOverlay(postElement, fingerprint, emotions) {
 }
 
 function processQueue() {
+  if (!extensionValid) return;
+
   const queueToProcess = inferenceQueue;
   inferenceQueue = [];
 
   for (const item of queueToProcess) {
     const { postElement, postId, postText, fingerprint } = item;
-    
+
     if (!document.body.contains(postElement)) continue;
 
-    chrome.runtime.sendMessage(
+    safeSendMessage(
       { type: "classify", id: postId, text: postText },
       (response) => {
-        if (chrome.runtime.lastError) {
-          console.warn("[ToneGuard] Message error:", chrome.runtime.lastError.message);
-          return;
-        }
-
         if (!response || !response.emotions) return;
 
         if (fingerprint) {
@@ -266,7 +310,6 @@ function processQueue() {
         }
 
         if (response.emotions.length > 0) {
-          console.log(`[ToneGuard] ${postId} flagged:`, response.emotions.join(", "));
           applyOverlay(postElement, fingerprint, response.emotions);
         }
       }
@@ -317,6 +360,7 @@ function processPost(postElement) {
 }
 
 function scanExistingPosts() {
+  if (!extensionValid) return;
   const posts = document.querySelectorAll(activePlatform.postSelector);
   posts.forEach(processPost);
 }
@@ -331,6 +375,7 @@ function findFeedContainer() {
 }
 
 function handleMutations(mutations) {
+  if (!extensionValid) return;
   for (const mutation of mutations) {
     if (mutation.addedNodes.length > 0) {
       if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
@@ -423,36 +468,37 @@ function watchForSPANavigation() {
 }
 
 function waitForModel() {
-  chrome.runtime.sendMessage({ type: "ping" }, (response) => {
-    if (chrome.runtime.lastError) {
-      console.warn("[ToneGuard] Waiting for model...");
-      setTimeout(waitForModel, 2000);
-      return;
-    }
+  if (!extensionValid) return;
+
+  safeSendMessage({ type: "ping" }, (response) => {
+    if (!extensionValid) return;
 
     if (response && response.ready) {
       modelReady = true;
       console.log("[ToneGuard] Model ready — scanning posts");
       scanExistingPosts();
     } else {
-      console.warn("[ToneGuard] Model not ready yet, retrying...");
       setTimeout(waitForModel, 3000);
     }
   });
 }
 
-chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace !== "sync") return;
-  if (changes.whitelistedKeywords) {
-    whitelistedKeywords = (changes.whitelistedKeywords.newValue || []).map(k => k.toLowerCase());
-  }
-  if (changes.whitelistedUsernames) {
-    whitelistedUsernames = (changes.whitelistedUsernames.newValue || []).map(u => u.toLowerCase());
-  }
-  if (changes.blacklistedKeywords) {
-    blacklistedKeywords = (changes.blacklistedKeywords.newValue || []).map(k => k.toLowerCase());
-  }
-});
+try {
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (!extensionValid || namespace !== "sync") return;
+    if (changes.whitelistedKeywords) {
+      whitelistedKeywords = (changes.whitelistedKeywords.newValue || []).map(k => k.toLowerCase());
+    }
+    if (changes.whitelistedUsernames) {
+      whitelistedUsernames = (changes.whitelistedUsernames.newValue || []).map(u => u.toLowerCase());
+    }
+    if (changes.blacklistedKeywords) {
+      blacklistedKeywords = (changes.blacklistedKeywords.newValue || []).map(k => k.toLowerCase());
+    }
+  });
+} catch {
+  // Extension context already invalidated at load time
+}
 
 function initialize() {
   activePlatform = detectPlatform();

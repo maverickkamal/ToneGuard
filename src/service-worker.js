@@ -60,7 +60,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  if (message.type === 'classify' || message.type === 'ping' || message.type === 'getProgress') {
+  if (message.type === 'classify' || message.type === 'ping' || message.type === 'getProgress' || message.type === 'retryLoad') {
     setupOffscreenDocument().then(() => {
       chrome.runtime.sendMessage(
         { ...message, target: 'offscreen' },

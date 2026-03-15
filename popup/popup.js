@@ -1,5 +1,8 @@
 const progressSection = document.getElementById("progress-section");
 const readySection = document.getElementById("ready-section");
+const errorSection = document.getElementById("error-section");
+const errorMessage = document.getElementById("error-message");
+const retryBtn = document.getElementById("retry-btn");
 const progressBar = document.getElementById("progress-bar");
 const progressPercent = document.getElementById("progress-percent");
 const progressStatus = document.getElementById("progress-status");
@@ -312,17 +315,29 @@ blacklistInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addBlacklistKeyword();
 });
 
+function showSection(section) {
+  progressSection.style.display = "none";
+  readySection.style.display = "none";
+  errorSection.style.display = "none";
+  section.style.display = "flex";
+}
+
 function updateProgressUI(progress) {
   const label = STATUS_LABELS[progress.status] || progress.status;
 
   if (progress.status === "ready") {
-    progressSection.style.display = "none";
-    readySection.style.display = "flex";
+    showSection(readySection);
     return;
   }
 
-  progressSection.style.display = "flex";
-  readySection.style.display = "none";
+  if (progress.status === "error") {
+    const detail = progress.file || "Both WebGPU and WASM backends failed.";
+    errorMessage.textContent = detail;
+    showSection(errorSection);
+    return;
+  }
+
+  showSection(progressSection);
 
   progressBar.style.width = `${progress.percent}%`;
   progressPercent.textContent = `${progress.percent}%`;
@@ -346,11 +361,20 @@ function pollProgress() {
       updateProgressUI(response);
     }
 
-    if (!response || response.status !== "ready") {
+    if (!response || (response.status !== "ready" && response.status !== "error")) {
       setTimeout(pollProgress, 500);
     }
   });
 }
+
+retryBtn.addEventListener("click", () => {
+  showSection(progressSection);
+  progressBar.style.width = "0%";
+  progressPercent.textContent = "0%";
+  progressStatus.textContent = STATUS_LABELS.initializing;
+  chrome.runtime.sendMessage({ type: "retryLoad" });
+  pollProgress();
+});
 
 async function init() {
   const settings = await loadSettings();

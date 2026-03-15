@@ -3,10 +3,12 @@ import * as ort from 'onnxruntime-web';
 
 env.allowLocalModels = false;
 
-
 const localLibPath = chrome.runtime.getURL('lib/');
 env.backends.onnx.wasm.wasmPaths = localLibPath;
 ort.env.wasm.wasmPaths = localLibPath;
+ort.env.logSeverityLevel = 3;
+
+const INFERENCE_TIMEOUT_MS = 30000;
 
 const MODEL_NAME = 'kamaludeen/multilingual_go_emotions-ONNX';
 
@@ -99,7 +101,12 @@ async function classifyText(text) {
   if (!masterEnabled) return [];
 
   const model = await loadModel();
-  const results = await model(text, { topk: null });
+  const results = await Promise.race([
+    model(text, { topk: null }),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Inference timeout')), INFERENCE_TIMEOUT_MS)
+    )
+  ]);
   return applyThresholds(results);
 }
 
@@ -115,6 +122,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     sendResponse({ ok: true });
     return false;
+  }
+
+  if (message.type === 'retryLoad') {
+    classifier = null;
+    modelIsReady = false;
+    downloadProgress = { status: 'initializing', percent: 0, file: '' };
+    loadModel()
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
   }
 
   if (message.type === 'classify') {
