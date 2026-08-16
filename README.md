@@ -1,14 +1,14 @@
 # ToneGuard
 
-Social media is exhausting sometimes. You open Twitter to check one thing and you're three rage-threads deep before you even realize it. I built ToneGuard because I wanted a way to actually control what kind of energy my feed throws at me (part of carnival ysws and it is a bounty 🥲😭) without relying on some company's algorithm to decide what's "healthy" for me.
+I built ToneGuard because I wanted a more practical way to manage what I see on social media feeds. It's a Chrome extension that classifies post text by emotion directly in the browser and blurs posts that match categories you choose.
 
-It's a Chrome extension that runs an emotion detection model right in your browser. It scans posts on Twitter/X, Reddit, and LinkedIn, figures out the emotional tone, and blurs out the ones you don't want to see. You pick which emotions to filter. Everything runs locally — your posts never leave your machine.
+It runs on Twitter/X, Reddit, and LinkedIn. You pick which emotions to filter, and you can always reveal a blurred post manually. All processing stays local on your device.
 
 ## How It Works
 
-There's an NLP model ([Transformers.js](https://huggingface.co/docs/transformers.js) + WebGPU) running in the background that classifies posts against 28 different emotions. If a post hits one of your selected emotions, it gets blurred with an overlay. You can always click through to reveal it — nothing gets deleted, just hidden until you choose to look.
+ToneGuard runs an NLP model in the background using [Transformers.js](https://huggingface.co/docs/transformers.js) with WebGPU when available. It classifies posts against 28 different emotions, and if a post matches one of your selected emotions it gets blurred with an overlay. Nothing is deleted — it's only hidden until you choose to reveal it.
 
-No servers, no API calls, no tracking. Your feed stays yours.
+There is no backend service for inference: classification happens in the extension with no API calls for post analysis.
 
 ## The Model
 
@@ -48,5 +48,3 @@ The model downloads on first use (~170MB, cached after that). A progress bar sho
 
 
 `src/` contains the source files for the service worker and offscreen document. Run `npm run build` to bundle them into `background/` and `offscreen/` via esbuild.
-
-*Readme written in collaboration with AI*
