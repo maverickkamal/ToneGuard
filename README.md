@@ -8,7 +8,7 @@ It runs on Twitter/X, Reddit, and LinkedIn. You pick which emotions to filter, a
 
 ToneGuard runs an NLP model in the background using [Transformers.js](https://huggingface.co/docs/transformers.js) with WebGPU when available. It classifies posts against 28 different emotions, and if a post matches one of your selected emotions it gets blurred with an overlay. Nothing is deleted — it's only hidden until you choose to reveal it.
 
-There is no backend service for inference: classification happens in the extension with no API calls for post analysis.
+No backend service processes your posts: inference runs locally in the extension (the model is downloaded on first use and cached).
 
 ## The Model
 
